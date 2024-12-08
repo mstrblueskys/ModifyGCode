@@ -25,6 +25,8 @@ $innerTemp = "240" # Degrees C
 $innerExtrude = "102" # Percent
 $maxFanSpeed = "172" # Fan speed measurement unit ¯\_(ツ)_/¯
 $StartLayer = 4 # Layer where your outter walls enclose inner walls
+$endLayer = 396 # Final layer you want hot walls
+$layerHeight = .2 # print layer height, used to calc z hop for tep change
 
 ############ Application starts here: #####################
 
@@ -41,6 +43,7 @@ $outFile = -join($inputNoExt, "_Mod.gcode")
 $innerWallCode = !$true
 $ouptutContent = @()
 $curWallLayer = 0
+$layerJump = 1
 
 # Pull file contents and itterate on each line
 
@@ -54,15 +57,16 @@ Get-Content "$inputG" | ForEach-Object {
 
     $ouptutContent += $currentRow
     
-    # Check for layer change and increment if so
+    # Check for layer change and increment if so, also calc a 5mm jump for temp changes
 
     If( $currentRow -eq ";LAYER_CHANGE"){
         $curWallLayer ++
+        $layerJump = ($layerHeight * $curWallLayer) + 5
     }
 
     # Only run if we're not on base layers as defined
 
-    If($curWallLayer -ge  $startLayer){
+    If($curWallLayer -ge  $startLayer -and $curWallLayer -lt $endLayer){
 
         # Check if we're on an inner wall
         # if inner wall, add code to heat, turn off fan, and extrude more and record you're on an inner wall
@@ -70,11 +74,13 @@ Get-Content "$inputG" | ForEach-Object {
 
         If($currentRow -eq ";TYPE:Inner wall") {
             $innerWallCode=$true
+            $ouptutContent += "G1 Z$layerJump ; move to heat nozzle"
             $ouptutContent += "M106 S0 ; set fan speed to zero"
             $ouptutContent += "M109 S$innerTemp ; Set nozzle temp and wait"
             $ouptutContent += "M221 S$innerExtrude ; Increase extrusion to 102%"
         } elseif ($innerWallCode -and $currentRow -eq ";WIPE_END") {
             $innerWallCode=!$true
+            $ouptutContent += "G1 Z$layerJump ; move to cool nozzle"
             $ouptutContent += "M106 S$maxFanSpeed ; set fan speed to zero"
             $ouptutContent += "M109 S$printTemp ; Set nozzle temp and wait"
             $ouptutContent += "M221 S100 ; Increase extrusion to 102%"
